@@ -10,6 +10,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from accounts.serializers import UserProfileSerializer
 
+@require_http_methods(["GET"])
+def csrf_token_view(request):
+    return JsonResponse({'csrfToken': get_token(request)})
+
+
 @api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def user_details_view(request):
@@ -31,6 +36,9 @@ urlpatterns = [
     
     # Authentication URLs
     path('api/auth/', include('dj_rest_auth.urls')),
+    
+    path('api/auth/csrf/', csrf_token_view, name='csrf-token'),
+    
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
     
     # App URLs
