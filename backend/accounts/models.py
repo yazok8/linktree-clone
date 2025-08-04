@@ -14,7 +14,7 @@ class User(AbstractUser):
         verbose_name='groups',
         blank=True,
         help_text='The groups this user belongs to. A user will get all permissions granted to each of their groups.',
-        related_name='accounts_user_set',  # Custom related_name
+        related_name='accounts_user_groups', 
         related_query_name='accounts_user',
     )
     
@@ -23,6 +23,6 @@ class User(AbstractUser):
         verbose_name='user permissions',
         blank=True,
         help_text='Specific permissions for this user.',
-        related_name='accounts_user_set',  # Custom related_name
+        related_name='accounts_user_permissions',  # Custom related_name
         related_query_name='accounts_user',
     )
