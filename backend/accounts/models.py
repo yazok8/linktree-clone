@@ -2,11 +2,13 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 class User(AbstractUser):
+    display_name = models.CharField(max_length=100, blank=True, null=True)
     bio = models.TextField(max_length=500, blank=True)
     profile_picture = models.ImageField(upload_to='profiles/', blank=True)
     background_color = models.CharField(max_length=7, default='#ffffff')
     text_color = models.CharField(max_length=7, default='#000000')
     created_at = models.DateTimeField(auto_now_add=True)
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     
     # Fix the reverse accessor conflicts by overriding the inherited fields
     groups = models.ManyToManyField(

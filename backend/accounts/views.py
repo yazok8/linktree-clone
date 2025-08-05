@@ -12,13 +12,33 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     
     def get_object(self):
         return self.request.user
+    
+    def patch(self, request, *args, **kwargs):
+        """Handle partial updates to user profile"""
+        user = self.get_object()
+        serializer = self.get_serializer(user, data=request.data, partial=True)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([])  # Allow public access
 def public_profile(request, username):
+    """Get public profile data for a user"""
     try:
         user = User.objects.get(username=username)
         serializer = UserProfileSerializer(user)
-        return Response(serializer.data)
+        # Only return public fields
+        data = {
+            'username': user.username,
+            'display_name': user.display_name,
+            'bio': user.bio,
+            'avatar': user.avatar.url if user.avatar else None,
+            'background_color': user.background_color,
+            'text_color': user.text_color,
+        }
+        return Response(data)
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=404)

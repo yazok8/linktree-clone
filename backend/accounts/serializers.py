@@ -4,6 +4,7 @@ from rest_framework import serializers
 from dj_rest_auth.registration.serializers import RegisterSerializer
 from django.contrib.auth import get_user_model
 from allauth.account.utils import setup_user_email
+from django.db import models
 
 User = get_user_model()
 
@@ -51,8 +52,8 @@ class CustomRegisterSerializer(RegisterSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name',
-                'bio', 'profile_picture', 'background_color',
+        fields = ['id', 'username', 'email', 'first_name', 'last_name','display_name',
+                'avatar','bio', 'profile_picture', 'background_color',
                 'text_color', 'created_at']
         read_only_fields = ['id', 'created_at']
         
@@ -61,9 +62,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'bio', 'profile_picture', 
-                 'background_color', 'text_color', 'links_count']
-        read_only_fields = ['id', 'username']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name','display_name',
+                'avatar','bio', 'profile_picture', 'background_color',
+                'text_color', 'created_at', 'links_count']
+        read_only_fields = ['id', 'created_at', 'username', 'email']
     
     def get_links_count(self, obj):
         return obj.links.filter(is_active=True).count()
+    
+    def validate_display_name(self, value):
+        if value and len(value.strip()) < 1:
+            raise serializers.ValidationError("Display name cannot be empty.")
+        return value.strip() if value else value
+    
+    def validate_bio(self, value):
+        if value and len(value) > 500:
+            raise serializers.ValidationError("Bio cannot exceed 500 characters.")
+        return value

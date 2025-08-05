@@ -3,11 +3,12 @@
 export interface User {
   id: number;
   username: string;
+  display_name?: string; // Optional, can be used for a more user-friendly name
   email: string;
   first_name: string;  // Added
   last_name: string;   // Added
   bio: string;
-  profile_picture: string;
+  profile_picture?: string;
   background_color: string;
   text_color: string;
   created_at: string;
