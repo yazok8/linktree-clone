@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const res = await authAPI.getProfile();
         setUser(res.data);
-      } catch (error: any) {
+      } catch {
         // Silently handle authentication errors - user just isn't logged in
         setUser(null);
       } finally {
@@ -69,24 +69,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authAPI.logout();
       console.log('Server logout successful');
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.warn('Server logout failed:', error);
       
+      // Type guard for API errors
+      const isApiError = (err: unknown): err is { response?: { status?: number; data?: { detail?: string } }; code?: string } => {
+        return typeof err === 'object' && err !== null && 'response' in err;
+      };
+      
       // Handle different error scenarios gracefully
-      if (error?.response?.status === 403) {
-        const errorMessage = error?.response?.data?.detail || '';
-        
-        if (errorMessage.includes('CSRF')) {
-          console.warn('CSRF token issue during logout - this is common');
-        } else if (errorMessage.includes('credentials')) {
-          console.warn('Session expired during logout - proceeding with local logout');
+      if (isApiError(error)) {
+        if (error?.response?.status === 403) {
+          const errorMessage = error?.response?.data?.detail || '';
+          
+          if (errorMessage.includes('CSRF')) {
+            console.warn('CSRF token issue during logout - this is common');
+          } else if (errorMessage.includes('credentials')) {
+            console.warn('Session expired during logout - proceeding with local logout');
+          } else {
+            console.warn('403 Forbidden during logout - likely session/auth issue');
+          }
+        } else if (error?.response?.status === 401) {
+          console.warn('Authentication failed during logout - user already logged out');
+        } else if (error?.code === 'NETWORK_ERROR' || !error?.response) {
+          console.warn('Network error during logout - proceeding with local logout');
         } else {
-          console.warn('403 Forbidden during logout - likely session/auth issue');
+          console.error('Unexpected logout error:', error);
         }
-      } else if (error?.response?.status === 401) {
-        console.warn('Authentication failed during logout - user already logged out');
-      } else if (error?.code === 'NETWORK_ERROR' || !error?.response) {
-        console.warn('Network error during logout - proceeding with local logout');
       } else {
         console.error('Unexpected logout error:', error);
       }
@@ -123,11 +132,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/login');
   };
 
-  // Emergency logout function (client-side only)
-  const forceLogout = () => {
-    console.warn('Performing force logout (client-side only)');
-    performLocalLogout();
-  };
 
   const value: AuthContextType = {
     user,

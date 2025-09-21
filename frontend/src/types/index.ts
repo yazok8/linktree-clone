@@ -37,7 +37,7 @@ export interface CreateLinkData {
   order?: number;
 }
 
-export interface UpdateLinkData extends Partial<CreateLinkData> {}
+export type UpdateLinkData = Partial<CreateLinkData>;
 
 export interface LoginCredentials {
   username: string;

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { Link, UserProfile } from '@/types';
 import { linksAPI, publicAPI } from '@/utils/api';
-import { UserProfile, Link } from '@/types';
-import { Instagram, Music, ExternalLink, MoreHorizontal } from 'lucide-react';
+import { ExternalLink, Instagram, MoreHorizontal, Music } from 'lucide-react';
+import Image from 'next/image';
+import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 export default function PublicProfile() {
   const params = useParams();
@@ -15,13 +16,8 @@ export default function PublicProfile() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (username) {
-      fetchProfileData();
-    }
-  }, [username]);
-
-  const fetchProfileData = async (): Promise<void> => {
+  // Use useCallback to memoize the function and fix the dependency warning
+  const fetchProfileData = useCallback(async (): Promise<void> => {
     try {
       const [profileRes, linksRes] = await Promise.all([
         publicAPI.getProfile(username),
@@ -29,12 +25,19 @@ export default function PublicProfile() {
       ]);
       setProfile(profileRes.data);
       setLinks(linksRes.data);
-    } catch (err) {
+    } catch (fetchError) {
+      console.error('Error fetching profile data:', fetchError);
       setError('Profile not found');
     } finally {
       setLoading(false);
     }
-  };
+  }, [username]);
+
+  useEffect(() => {
+    if (username) {
+      fetchProfileData();
+    }
+  }, [username, fetchProfileData]);
 
   const getSocialIcon = (url: string) => {
     if (url.includes('instagram.com')) return <Instagram className="w-8 h-8" />;
@@ -93,11 +96,16 @@ export default function PublicProfile() {
                 {/* Profile Picture */}
                 <div className="mb-6">
                   {profile?.profile_picture ? (
-                    <img 
-                      src={profile.profile_picture} 
-                      alt={profile.username}
-                      className="w-20 h-20 rounded-full object-cover mx-auto border-4 border-white shadow-lg"
-                    />
+                    <div className="w-20 h-20 rounded-full mx-auto border-4 border-white shadow-lg overflow-hidden">
+                      <Image 
+                        src={profile.profile_picture} 
+                        alt={`${profile.username}'s profile picture`}
+                        width={80}
+                        height={80}
+                        className="w-full h-full object-cover"
+                        priority
+                      />
+                    </div>
                   ) : (
                     <div className="w-20 h-20 rounded-full bg-white mx-auto border-4 border-white shadow-lg flex items-center justify-center">
                       <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-pink-500 rounded-full flex items-center justify-center">
@@ -131,6 +139,7 @@ export default function PublicProfile() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-gray-800 hover:text-gray-600 transition-colors"
+                        aria-label={`Visit ${link.title} on external site`}
                       >
                         {getSocialIcon(link.url)}
                       </a>
@@ -148,6 +157,7 @@ export default function PublicProfile() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="group block"
+                    aria-label={`Visit ${link.title}`}
                   >
                     {/* 3D Card with Shadow Effect */}
                     <div className="relative">
@@ -179,7 +189,11 @@ export default function PublicProfile() {
                           
                           {/* Three Dots Menu */}
                           <div className="flex-shrink-0 ml-4">
-                            <button className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+                            <button 
+                              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                              aria-label="More options"
+                              type="button"
+                            >
                               <MoreHorizontal className="w-5 h-5" />
                             </button>
                           </div>

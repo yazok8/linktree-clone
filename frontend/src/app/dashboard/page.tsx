@@ -4,26 +4,26 @@ import { useAuth } from '@/context/AuthContext';
 import { CreateLinkData, Link } from '@/types';
 import { authAPI, linksAPI } from '@/utils/api';
 import { BarChart3, Brush, Copy, ExternalLink, Eye, GripVertical, Plus, Settings, Share2, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useAuthGuard } from '../hooks/useAuthGuard';
 
 // This is the main component exported for the page.
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+ const { loading, shouldShowContent } = useAuthGuard({
+    requireAuth: true,
+    redirectTo: '/' // Redirect to homepage which shows auth modal
+  });
 
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
-
-  if (loading || !user) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gray-50">
         <div className="text-lg text-gray-600">Loading...</div>
       </div>
     );
+  }
+
+  if (!shouldShowContent) {
+    return null; // Auth guard will handle redirect
   }
 
   return <Dashboard />;
@@ -84,16 +84,25 @@ function Dashboard() {
       setLinks([...links, response.data]);
       setNewLink({ title: '', url: '', description: '' });
       setShowAddForm(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating link:', err);
       
-      if (err.response?.status === 403) {
-        setError('Permission denied. Please log in again.');
-      } else if (err.response?.status === 401) {
-        setError('Authentication failed. Please log in again.');
-        logout();
-      } else if (err.response?.status === 400) {
-        setError('Invalid link data. Please check your inputs.');
+      // Type guard for API errors
+      const isApiError = (error: unknown): error is { response?: { status?: number } } => {
+        return typeof error === 'object' && error !== null && 'response' in error;
+      };
+      
+      if (isApiError(err)) {
+        if (err.response?.status === 403) {
+          setError('Permission denied. Please log in again.');
+        } else if (err.response?.status === 401) {
+          setError('Authentication failed. Please log in again.');
+          logout();
+        } else if (err.response?.status === 400) {
+          setError('Invalid link data. Please check your inputs.');
+        } else {
+          setError('Failed to create link. Please try again.');
+        }
       } else {
         setError('Failed to create link. Please try again.');
       }
@@ -106,9 +115,15 @@ function Dashboard() {
     try {
       await linksAPI.deleteLink(id);
       setLinks(links.filter(link => link.id !== id));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting link:', err);
-      if (err.response?.status === 403) {
+      
+      // Type guard for API errors
+      const isApiError = (error: unknown): error is { response?: { status?: number } } => {
+        return typeof error === 'object' && error !== null && 'response' in error;
+      };
+      
+      if (isApiError(err) && err.response?.status === 403) {
         setError('Permission denied. Unable to delete link.');
       } else {
         setError('Failed to delete link. Please try again.');
@@ -208,7 +223,7 @@ function Dashboard() {
       <header className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-gray-900">My Linktree</h1>
+            <h1 className="text-2xl font-bold text-gray-900">My LinkHub</h1>
           </div>
           
           <div className="flex items-center space-x-3">

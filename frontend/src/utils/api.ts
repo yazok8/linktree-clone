@@ -21,7 +21,7 @@ const getCSRFToken = async (): Promise<string | null> => {
     try {
       // Try to get CSRF token from cookie first
       const cookies = document.cookie.split(';');
-      for (let cookie of cookies) {
+      for (const cookie of cookies) {
         const [name, value] = cookie.trim().split('=');
         if (name === 'csrftoken') {
           csrfToken = decodeURIComponent(value);
@@ -125,38 +125,54 @@ export const authAPI = {
       
       return response;
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Clear CSRF token regardless of success/failure
       csrfToken = null;
       
+      // Type guard for API errors
+      const isApiError = (err: unknown): err is { 
+        response?: { 
+          status?: number; 
+          data?: { detail?: string } 
+        }; 
+        message?: string 
+      } => {
+        return typeof err === 'object' && err !== null && 'response' in err;
+      };
+      
       // Handle specific Django logout errors
-      if (error.response?.status === 403) {
-        const errorDetail = error.response?.data?.detail || '';
-        
-        if (errorDetail.includes('CSRF')) {
-          console.warn('CSRF error during logout - attempting with fresh token');
+      if (isApiError(error)) {
+        if (error.response?.status === 403) {
+          const errorDetail = error.response?.data?.detail || '';
           
-          try {
-            // Try one more time with fresh CSRF token
-            await refreshCSRFToken();
-            return await api.post('/auth/logout/');
-          } catch (retryError) {
-            console.warn('Logout retry failed, treating as successful');
-            // Return a mock successful response
-            return { status: 200, data: { detail: 'Logged out locally' } } as AxiosResponse<{ detail: string }>;
+          if (errorDetail.includes('CSRF')) {
+            console.warn('CSRF error during logout - attempting with fresh token');
+            
+            try {
+              // Try one more time with fresh CSRF token
+              await refreshCSRFToken();
+              return await api.post('/auth/logout/');
+            } catch {
+              console.warn('Logout retry failed, treating as successful');
+              // Return a mock successful response
+              return { status: 200, data: { detail: 'Logged out locally' } } as AxiosResponse<{ detail: string }>;
+            }
+          } else if (errorDetail.includes('authenticated') || errorDetail.includes('permission')) {
+            console.warn('User not authenticated during logout - treating as successful');
+            return { status: 200, data: { detail: 'Already logged out' } } as AxiosResponse<{ detail: string }>;
           }
-        } else if (errorDetail.includes('authenticated') || errorDetail.includes('permission')) {
-          console.warn('User not authenticated during logout - treating as successful');
+        } else if (error.response?.status === 401) {
+          console.warn('Unauthorized during logout - user already logged out');
           return { status: 200, data: { detail: 'Already logged out' } } as AxiosResponse<{ detail: string }>;
         }
-      } else if (error.response?.status === 401) {
-        console.warn('Unauthorized during logout - user already logged out');
-        return { status: 200, data: { detail: 'Already logged out' } } as AxiosResponse<{ detail: string }>;
+        
+        // For any other error, don't throw - logout should always succeed locally
+        console.warn('Logout failed but proceeding:', error.message || 'Unknown error');
+        return { status: 200, data: { detail: 'Logged out locally' } } as AxiosResponse<{ detail: string }>;
+      } else {
+        console.warn('Logout failed but proceeding: Unknown error type');
+        return { status: 200, data: { detail: 'Logged out locally' } } as AxiosResponse<{ detail: string }>;
       }
-      
-      // For any other error, don't throw - logout should always succeed locally
-      console.warn('Logout failed but proceeding:', error.message);
-      return { status: 200, data: { detail: 'Logged out locally' } } as AxiosResponse<{ detail: string }>;
     }
   },
   
