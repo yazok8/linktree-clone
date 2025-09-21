@@ -1,9 +1,9 @@
 'use client';
 
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
 import { LoginCredentials, RegisterData, UserProfile } from '@/types';
 import { authAPI } from '@/utils/api';
+import { useRouter } from 'next/navigation';
+import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -62,19 +62,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
+      // Ensure we have CSRF token before logout
+      await authAPI.initializeCSRF();
+      
+      // Attempt server-side logout
       await authAPI.logout();
-      setUser(null);
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      // Even if logout fails on backend, clear user locally
-      setUser(null);
-      router.push('/login');
+      console.log('Server logout successful');
+      
+    } catch (error: any) {
+      console.warn('Server logout failed:', error);
+      
+      // Handle different error scenarios gracefully
+      if (error?.response?.status === 403) {
+        const errorMessage = error?.response?.data?.detail || '';
+        
+        if (errorMessage.includes('CSRF')) {
+          console.warn('CSRF token issue during logout - this is common');
+        } else if (errorMessage.includes('credentials')) {
+          console.warn('Session expired during logout - proceeding with local logout');
+        } else {
+          console.warn('403 Forbidden during logout - likely session/auth issue');
+        }
+      } else if (error?.response?.status === 401) {
+        console.warn('Authentication failed during logout - user already logged out');
+      } else if (error?.code === 'NETWORK_ERROR' || !error?.response) {
+        console.warn('Network error during logout - proceeding with local logout');
+      } else {
+        console.error('Unexpected logout error:', error);
+      }
+      
+      // Continue with local logout regardless of server response
+    } finally {
+      // Always perform local cleanup
+      performLocalLogout();
     }
   };
 
+  const performLocalLogout = () => {
+    // Clear any stored tokens (if you're using them)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      sessionStorage.removeItem('authToken');
+      sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('refreshToken');
+      
+      // Clear any other auth-related storage
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('auth_') || key.startsWith('token_')) {
+          localStorage.removeItem(key);
+        }
+      });
+    }
+    
+    // Clear user state
+    setUser(null);
+    
+    // Navigate to login
+    router.push('/login');
+  };
+
+  // Emergency logout function (client-side only)
+  const forceLogout = () => {
+    console.warn('Performing force logout (client-side only)');
+    performLocalLogout();
+  };
+
+  const value: AuthContextType = {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

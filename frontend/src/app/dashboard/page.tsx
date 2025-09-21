@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { linksAPI, authAPI } from '@/utils/api';
-import { UserProfile, Link, CreateLinkData } from '@/types';
 import { useAuth } from '@/context/AuthContext';
+import { CreateLinkData, Link } from '@/types';
+import { authAPI, linksAPI } from '@/utils/api';
+import { BarChart3, Brush, Copy, ExternalLink, Eye, GripVertical, Plus, Settings, Share2, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Plus, Settings, Share2, Eye, BarChart3, Copy, Trash2, GripVertical, ExternalLink } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 // This is the main component exported for the page.
 export default function DashboardPage() {
@@ -213,7 +213,7 @@ function Dashboard() {
           
           <div className="flex items-center space-x-3">
             <button className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-full text-gray-700 hover:bg-gray-50 transition-colors">
-              <Settings className="w-4 h-4" />
+              <Brush className="w-4 h-4" />
               <span className="hidden sm:inline">Design</span>
             </button>
             

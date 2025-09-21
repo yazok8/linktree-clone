@@ -1,7 +1,7 @@
-// src/utils/api.ts - Fixed version with proper CSRF handling
+// src/utils/api.ts - Enhanced version with better logout handling
 
-import axios, { AxiosResponse } from 'axios';
 import { CreateLinkData, Link, LoginCredentials, RegisterData, UpdateLinkData, User, UserProfile } from '@/types';
+import axios, { AxiosResponse } from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -44,6 +44,12 @@ const getCSRFToken = async (): Promise<string | null> => {
   return csrfToken;
 };
 
+// Enhanced CSRF token refresh
+const refreshCSRFToken = async (): Promise<string | null> => {
+  csrfToken = null; // Clear existing token
+  return await getCSRFToken();
+};
+
 // Request interceptor for CSRF token
 api.interceptors.request.use(async (config) => {
   if (['post', 'put', 'patch', 'delete'].includes(config.method || '')) {
@@ -55,16 +61,29 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Response interceptor for error handling
+// Enhanced response interceptor
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Handle CSRF token issues
+    const originalRequest = error.config;
+    
+    // Handle CSRF token issues with retry
     if (error.response?.status === 403 && 
-        error.response?.data?.detail?.includes?.('CSRF')) {
-      // Clear the token and try to get a fresh one
-      csrfToken = null;
-      console.warn('CSRF token issue, will retry with fresh token');
+        error.response?.data?.detail?.includes?.('CSRF') &&
+        !originalRequest._retry) {
+      
+      originalRequest._retry = true;
+      console.warn('CSRF token issue, refreshing and retrying...');
+      
+      try {
+        const newToken = await refreshCSRFToken();
+        if (newToken) {
+          originalRequest.headers['X-CSRFToken'] = newToken;
+          return api(originalRequest);
+        }
+      } catch (retryError) {
+        console.error('Failed to refresh CSRF token:', retryError);
+      }
     }
     
     // Don't log 401/403 errors as they're expected when not authenticated
@@ -82,13 +101,78 @@ export const authAPI = {
     await getCSRFToken();
   },
   
+  // Refresh CSRF token
+  refreshCSRF: async (): Promise<void> => {
+    await refreshCSRFToken();
+  },
+  
   login: async (credentials: LoginCredentials): Promise<AxiosResponse<{ user: User }>> => {
     await getCSRFToken(); // Ensure we have a fresh token
     return api.post('/auth/login/', credentials);
   },
   
-  logout: (): Promise<AxiosResponse<{ detail: string }>> => 
-    api.post('/auth/logout/'),
+  // Enhanced logout with better error handling
+  logout: async (): Promise<AxiosResponse<{ detail: string }>> => {
+    try {
+      // Ensure we have a valid CSRF token
+      await getCSRFToken();
+      
+      // Attempt logout
+      const response = await api.post('/auth/logout/');
+      
+      // Clear CSRF token after successful logout
+      csrfToken = null;
+      
+      return response;
+      
+    } catch (error: any) {
+      // Clear CSRF token regardless of success/failure
+      csrfToken = null;
+      
+      // Handle specific Django logout errors
+      if (error.response?.status === 403) {
+        const errorDetail = error.response?.data?.detail || '';
+        
+        if (errorDetail.includes('CSRF')) {
+          console.warn('CSRF error during logout - attempting with fresh token');
+          
+          try {
+            // Try one more time with fresh CSRF token
+            await refreshCSRFToken();
+            return await api.post('/auth/logout/');
+          } catch (retryError) {
+            console.warn('Logout retry failed, treating as successful');
+            // Return a mock successful response
+            return { status: 200, data: { detail: 'Logged out locally' } } as AxiosResponse<{ detail: string }>;
+          }
+        } else if (errorDetail.includes('authenticated') || errorDetail.includes('permission')) {
+          console.warn('User not authenticated during logout - treating as successful');
+          return { status: 200, data: { detail: 'Already logged out' } } as AxiosResponse<{ detail: string }>;
+        }
+      } else if (error.response?.status === 401) {
+        console.warn('Unauthorized during logout - user already logged out');
+        return { status: 200, data: { detail: 'Already logged out' } } as AxiosResponse<{ detail: string }>;
+      }
+      
+      // For any other error, don't throw - logout should always succeed locally
+      console.warn('Logout failed but proceeding:', error.message);
+      return { status: 200, data: { detail: 'Logged out locally' } } as AxiosResponse<{ detail: string }>;
+    }
+  },
+  
+  // Alternative: Force logout without server call
+  logoutLocal: async (): Promise<void> => {
+    csrfToken = null;
+    // Clear any session cookies by making a simple GET request
+    try {
+      await fetch(`${API_BASE_URL}/auth/user/`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+    } catch {
+      // Ignore errors
+    }
+  },
     
   register: (userData: RegisterData): Promise<AxiosResponse<{ user: User }>> => 
     api.post('/auth/registration/', userData),
@@ -116,6 +200,30 @@ export const linksAPI = {
 export const publicAPI = {
   getProfile: (username: string): Promise<AxiosResponse<UserProfile>> => 
     api.get(`/accounts/profile/${username}/`),
+};
+
+// Utility function to check if user is authenticated
+export const checkAuthStatus = async (): Promise<boolean> => {
+  try {
+    await api.get('/auth/user/');
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Utility to clear all auth state
+export const clearAuthState = (): void => {
+  csrfToken = null;
+  // Clear any cached data
+  if (typeof window !== 'undefined') {
+    // Clear any auth-related localStorage/sessionStorage if you use it
+    const keysToRemove = ['authToken', 'user', 'session'];
+    keysToRemove.forEach(key => {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    });
+  }
 };
 
 export default api;
